@@ -54,17 +54,19 @@ export default function UserManagement() {
   });
 
   const { data: orgUsers, isLoading } = useQuery({
-    queryKey: ["org-users", organizationId],
+    queryKey: ["org-users", organizationId, isSuperAdmin],
     queryFn: async () => {
-      if (!organizationId) return [];
-      const { data: profiles, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("organization_id", organizationId);
+      let profilesQuery = supabase.from("profiles").select("*");
+      // Super admins can see all users; group admins see only their org
+      if (!isSuperAdmin) {
+        if (!organizationId) return [];
+        profilesQuery = profilesQuery.eq("organization_id", organizationId);
+      }
+      const { data: profiles, error } = await profilesQuery;
       if (error) throw error;
 
-      // Fetch roles for these users
       const userIds = profiles.map((p: any) => p.id);
+      if (!userIds.length) return [];
       const { data: roles } = await supabase
         .from("user_roles")
         .select("user_id, role")
@@ -75,8 +77,20 @@ export default function UserManagement() {
         roles: (roles || []).filter((r: any) => r.user_id === p.id).map((r: any) => r.role),
       }));
     },
-    enabled: !!organizationId,
   });
+
+  const assignOrganization = async (userId: string, newOrgId: string | null) => {
+    const { error } = await supabase
+      .from("profiles")
+      .update({ organization_id: newOrgId })
+      .eq("id", userId);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Organization updated");
+    qc.invalidateQueries({ queryKey: ["org-users"] });
+  };
 
   const updateRole = async (userId: string, newRole: AppRole) => {
     // Remove existing roles except super_admin (only super admins can assign that)
