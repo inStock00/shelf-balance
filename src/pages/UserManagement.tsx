@@ -30,7 +30,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Users, UserPlus, Shield } from "lucide-react";
+import { Users, UserPlus, Shield, Building2 } from "lucide-react";
 import { toast } from "sonner";
 
 type AppRole = "super_admin" | "group_admin" | "user";
@@ -42,18 +42,31 @@ export default function UserManagement() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<AppRole>("user");
 
-  const { data: orgUsers, isLoading } = useQuery({
-    queryKey: ["org-users", organizationId],
+  // Fetch all organizations (for super admins to reassign users)
+  const { data: allOrgs } = useQuery({
+    queryKey: ["all-organizations"],
     queryFn: async () => {
-      if (!organizationId) return [];
-      const { data: profiles, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("organization_id", organizationId);
+      const { data, error } = await supabase.from("organizations").select("id, name").order("name");
+      if (error) throw error;
+      return data;
+    },
+    enabled: isSuperAdmin,
+  });
+
+  const { data: orgUsers, isLoading } = useQuery({
+    queryKey: ["org-users", organizationId, isSuperAdmin],
+    queryFn: async () => {
+      let profilesQuery = supabase.from("profiles").select("*");
+      // Super admins can see all users; group admins see only their org
+      if (!isSuperAdmin) {
+        if (!organizationId) return [];
+        profilesQuery = profilesQuery.eq("organization_id", organizationId);
+      }
+      const { data: profiles, error } = await profilesQuery;
       if (error) throw error;
 
-      // Fetch roles for these users
       const userIds = profiles.map((p: any) => p.id);
+      if (!userIds.length) return [];
       const { data: roles } = await supabase
         .from("user_roles")
         .select("user_id, role")
@@ -64,8 +77,20 @@ export default function UserManagement() {
         roles: (roles || []).filter((r: any) => r.user_id === p.id).map((r: any) => r.role),
       }));
     },
-    enabled: !!organizationId,
   });
+
+  const assignOrganization = async (userId: string, newOrgId: string | null) => {
+    const { error } = await supabase
+      .from("profiles")
+      .update({ organization_id: newOrgId })
+      .eq("id", userId);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Organization updated");
+    qc.invalidateQueries({ queryKey: ["org-users"] });
+  };
 
   const updateRole = async (userId: string, newRole: AppRole) => {
     // Remove existing roles except super_admin (only super admins can assign that)
@@ -137,6 +162,7 @@ export default function UserManagement() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
+                  {isSuperAdmin && <TableHead>Organization</TableHead>}
                   <TableHead>Roles</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
@@ -146,6 +172,24 @@ export default function UserManagement() {
                   <TableRow key={u.id}>
                     <TableCell className="font-medium">{u.display_name || "—"}</TableCell>
                     <TableCell className="text-muted-foreground">{u.email}</TableCell>
+                    {isSuperAdmin && (
+                      <TableCell>
+                        <Select
+                          value={u.organization_id || "none"}
+                          onValueChange={(v) => assignOrganization(u.id, v === "none" ? null : v)}
+                        >
+                          <SelectTrigger className="w-44">
+                            <SelectValue placeholder="No organization" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No organization</SelectItem>
+                            {allOrgs?.map((org: any) => (
+                              <SelectItem key={org.id} value={org.id}>{org.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                    )}
                     <TableCell>
                       <div className="flex gap-1 flex-wrap">
                         {u.roles.map((r: string) => (
