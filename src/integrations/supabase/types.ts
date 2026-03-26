@@ -14,7 +14,149 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      inventory_logs: {
+        Row: {
+          change_amount: number
+          created_at: string
+          id: string
+          product_id: string
+          reason: string
+          reference_transaction_id: string | null
+        }
+        Insert: {
+          change_amount: number
+          created_at?: string
+          id?: string
+          product_id: string
+          reason: string
+          reference_transaction_id?: string | null
+        }
+        Update: {
+          change_amount?: number
+          created_at?: string
+          id?: string
+          product_id?: string
+          reason?: string
+          reference_transaction_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_logs_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_logs_reference_transaction_id_fkey"
+            columns: ["reference_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ledger_entries: {
+        Row: {
+          account_name: string
+          created_at: string
+          credit: number
+          debit: number
+          id: string
+          transaction_id: string
+        }
+        Insert: {
+          account_name: string
+          created_at?: string
+          credit?: number
+          debit?: number
+          id?: string
+          transaction_id: string
+        }
+        Update: {
+          account_name?: string
+          created_at?: string
+          credit?: number
+          debit?: number
+          id?: string
+          transaction_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ledger_entries_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          category: string
+          created_at: string
+          current_stock: number
+          id: string
+          name: string
+          reorder_point: number
+          selling_price: number
+          sku: string
+          unit_cost: number
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          current_stock?: number
+          id?: string
+          name: string
+          reorder_point?: number
+          selling_price?: number
+          sku: string
+          unit_cost?: number
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          current_stock?: number
+          id?: string
+          name?: string
+          reorder_point?: number
+          selling_price?: number
+          sku?: string
+          unit_cost?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      transactions: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          status: string
+          total_amount: number
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          status?: string
+          total_amount?: number
+          type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          status?: string
+          total_amount?: number
+          type?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
