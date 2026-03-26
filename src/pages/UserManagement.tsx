@@ -30,7 +30,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Users, UserPlus, Shield } from "lucide-react";
+import { Users, UserPlus, Shield, Building2 } from "lucide-react";
 import { toast } from "sonner";
 
 type AppRole = "super_admin" | "group_admin" | "user";
@@ -41,6 +41,17 @@ export default function UserManagement() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<AppRole>("user");
+
+  // Fetch all organizations (for super admins to reassign users)
+  const { data: allOrgs } = useQuery({
+    queryKey: ["all-organizations"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("organizations").select("id, name").order("name");
+      if (error) throw error;
+      return data;
+    },
+    enabled: isSuperAdmin,
+  });
 
   const { data: orgUsers, isLoading } = useQuery({
     queryKey: ["org-users", organizationId],
