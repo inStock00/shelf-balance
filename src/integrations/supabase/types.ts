@@ -19,6 +19,7 @@ export type Database = {
           change_amount: number
           created_at: string
           id: string
+          organization_id: string | null
           product_id: string
           reason: string
           reference_transaction_id: string | null
@@ -27,6 +28,7 @@ export type Database = {
           change_amount: number
           created_at?: string
           id?: string
+          organization_id?: string | null
           product_id: string
           reason: string
           reference_transaction_id?: string | null
@@ -35,11 +37,19 @@ export type Database = {
           change_amount?: number
           created_at?: string
           id?: string
+          organization_id?: string | null
           product_id?: string
           reason?: string
           reference_transaction_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "inventory_logs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "inventory_logs_product_id_fkey"
             columns: ["product_id"]
@@ -63,6 +73,7 @@ export type Database = {
           credit: number
           debit: number
           id: string
+          organization_id: string | null
           transaction_id: string
         }
         Insert: {
@@ -71,6 +82,7 @@ export type Database = {
           credit?: number
           debit?: number
           id?: string
+          organization_id?: string | null
           transaction_id: string
         }
         Update: {
@@ -79,9 +91,17 @@ export type Database = {
           credit?: number
           debit?: number
           id?: string
+          organization_id?: string | null
           transaction_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "ledger_entries_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "ledger_entries_transaction_id_fkey"
             columns: ["transaction_id"]
@@ -91,6 +111,59 @@ export type Database = {
           },
         ]
       }
+      organization_features: {
+        Row: {
+          enabled: boolean
+          feature_name: string
+          id: string
+          organization_id: string
+        }
+        Insert: {
+          enabled?: boolean
+          feature_name: string
+          id?: string
+          organization_id: string
+        }
+        Update: {
+          enabled?: boolean
+          feature_name?: string
+          id?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_features_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organizations: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          subscription_status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          subscription_status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          subscription_status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       products: {
         Row: {
           category: string
@@ -98,6 +171,7 @@ export type Database = {
           current_stock: number
           id: string
           name: string
+          organization_id: string | null
           reorder_point: number
           selling_price: number
           sku: string
@@ -110,6 +184,7 @@ export type Database = {
           current_stock?: number
           id?: string
           name: string
+          organization_id?: string | null
           reorder_point?: number
           selling_price?: number
           sku: string
@@ -122,19 +197,64 @@ export type Database = {
           current_stock?: number
           id?: string
           name?: string
+          organization_id?: string | null
           reorder_point?: number
           selling_price?: number
           sku?: string
           unit_cost?: number
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "products_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          email: string | null
+          id: string
+          organization_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id: string
+          organization_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id?: string
+          organization_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       transactions: {
         Row: {
           created_at: string
           id: string
           notes: string | null
+          organization_id: string | null
           status: string
           total_amount: number
           type: string
@@ -143,6 +263,7 @@ export type Database = {
           created_at?: string
           id?: string
           notes?: string | null
+          organization_id?: string | null
           status?: string
           total_amount?: number
           type: string
@@ -151,9 +272,36 @@ export type Database = {
           created_at?: string
           id?: string
           notes?: string | null
+          organization_id?: string | null
           status?: string
           total_amount?: number
           type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
         }
         Relationships: []
       }
@@ -162,10 +310,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_org_id: { Args: { _user_id: string }; Returns: string }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      is_super_admin: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "super_admin" | "group_admin" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -292,6 +448,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["super_admin", "group_admin", "user"],
+    },
   },
 } as const
