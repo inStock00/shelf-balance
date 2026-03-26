@@ -162,6 +162,7 @@ export default function UserManagement() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
+                  {isSuperAdmin && <TableHead>Organization</TableHead>}
                   <TableHead>Roles</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
@@ -171,6 +172,24 @@ export default function UserManagement() {
                   <TableRow key={u.id}>
                     <TableCell className="font-medium">{u.display_name || "—"}</TableCell>
                     <TableCell className="text-muted-foreground">{u.email}</TableCell>
+                    {isSuperAdmin && (
+                      <TableCell>
+                        <Select
+                          value={u.organization_id || "none"}
+                          onValueChange={(v) => assignOrganization(u.id, v === "none" ? null : v)}
+                        >
+                          <SelectTrigger className="w-44">
+                            <SelectValue placeholder="No organization" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No organization</SelectItem>
+                            {allOrgs?.map((org: any) => (
+                              <SelectItem key={org.id} value={org.id}>{org.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                    )}
                     <TableCell>
                       <div className="flex gap-1 flex-wrap">
                         {u.roles.map((r: string) => (
