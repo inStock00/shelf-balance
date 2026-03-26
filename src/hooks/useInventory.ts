@@ -1,15 +1,20 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "./useAuth";
 import type { Database } from "@/integrations/supabase/types";
 
 type Product = Database["public"]["Tables"]["products"]["Row"];
 type ProductInsert = Database["public"]["Tables"]["products"]["Insert"];
 
 export function useProducts(search?: string) {
+  const { organizationId } = useAuth();
   return useQuery({
-    queryKey: ["products", search],
+    queryKey: ["products", search, organizationId],
     queryFn: async () => {
       let query = supabase.from("products").select("*").order("name");
+      if (organizationId) {
+        query = query.eq("organization_id", organizationId);
+      }
       if (search) {
         query = query.or(`name.ilike.%${search}%,sku.ilike.%${search}%`);
       }
@@ -17,6 +22,7 @@ export function useProducts(search?: string) {
       if (error) throw error;
       return data as Product[];
     },
+    enabled: !!organizationId,
   });
 }
 
@@ -34,9 +40,14 @@ export function useProduct(id: string) {
 
 export function useCreateProduct() {
   const qc = useQueryClient();
+  const { organizationId } = useAuth();
   return useMutation({
-    mutationFn: async (product: ProductInsert) => {
-      const { data, error } = await supabase.from("products").insert(product).select().single();
+    mutationFn: async (product: Omit<ProductInsert, "organization_id">) => {
+      const { data, error } = await supabase
+        .from("products")
+        .insert({ ...product, organization_id: organizationId } as any)
+        .select()
+        .single();
       if (error) throw error;
       return data;
     },
@@ -57,13 +68,24 @@ export function useUpdateProduct() {
 }
 
 export function useDashboardStats() {
+  const { organizationId } = useAuth();
   return useQuery({
-    queryKey: ["dashboard-stats"],
+    queryKey: ["dashboard-stats", organizationId],
     queryFn: async () => {
+      let productsQuery = supabase.from("products").select("current_stock, unit_cost, selling_price");
+      let salesQuery = supabase.from("transactions").select("total_amount, created_at").eq("type", "Sale");
+      let lowStockQuery = supabase.from("products").select("id, name, current_stock, reorder_point");
+
+      if (organizationId) {
+        productsQuery = productsQuery.eq("organization_id", organizationId);
+        salesQuery = salesQuery.eq("organization_id", organizationId);
+        lowStockQuery = lowStockQuery.eq("organization_id", organizationId);
+      }
+
       const [productsRes, salesRes, lowStockRes] = await Promise.all([
-        supabase.from("products").select("current_stock, unit_cost, selling_price"),
-        supabase.from("transactions").select("total_amount, created_at").eq("type", "Sale"),
-        supabase.from("products").select("id, name, current_stock, reorder_point"),
+        productsQuery,
+        salesQuery,
+        lowStockQuery,
       ]);
 
       if (productsRes.error) throw productsRes.error;
@@ -84,7 +106,6 @@ export function useDashboardStats() {
         (p) => p.current_stock <= p.reorder_point
       );
 
-      // 7-day sales trend
       const salesTrend: { date: string; amount: number }[] = [];
       for (let i = 6; i >= 0; i--) {
         const d = new Date();
@@ -98,11 +119,13 @@ export function useDashboardStats() {
 
       return { totalStockValue, monthlyRevenue, lowStockItems, salesTrend };
     },
+    enabled: !!organizationId,
   });
 }
 
 export function useProcessSale() {
   const qc = useQueryClient();
+  const { organizationId } = useAuth();
   return useMutation({
     mutationFn: async (items: { product: Product; quantity: number }[]) => {
       const totalAmount = items.reduce(
@@ -112,15 +135,13 @@ export function useProcessSale() {
         (sum, i) => sum + i.quantity * i.product.unit_cost, 0
       );
 
-      // Create transaction
       const { data: txn, error: txnErr } = await supabase
         .from("transactions")
-        .insert({ type: "Sale", total_amount: totalAmount, status: "Completed" })
+        .insert({ type: "Sale", total_amount: totalAmount, status: "Completed", organization_id: organizationId } as any)
         .select()
         .single();
       if (txnErr) throw txnErr;
 
-      // Update stock & create inventory logs
       for (const item of items) {
         const { error: stockErr } = await supabase
           .from("products")
@@ -133,31 +154,23 @@ export function useProcessSale() {
           change_amount: -item.quantity,
           reason: "Sale",
           reference_transaction_id: txn.id,
-        });
+          organization_id: organizationId,
+        } as any);
         if (logErr) throw logErr;
       }
 
-      // Double-entry: Debit Cash, Credit Revenue
-      const { error: le1 } = await supabase.from("ledger_entries").insert({
-        transaction_id: txn.id, account_name: "Cash", debit: totalAmount, credit: 0,
-      });
-      if (le1) throw le1;
-
-      const { error: le2 } = await supabase.from("ledger_entries").insert({
-        transaction_id: txn.id, account_name: "Revenue", debit: 0, credit: totalAmount,
-      });
-      if (le2) throw le2;
-
-      // Debit COGS, Credit Inventory
-      const { error: le3 } = await supabase.from("ledger_entries").insert({
-        transaction_id: txn.id, account_name: "COGS", debit: totalCOGS, credit: 0,
-      });
-      if (le3) throw le3;
-
-      const { error: le4 } = await supabase.from("ledger_entries").insert({
-        transaction_id: txn.id, account_name: "Inventory", debit: 0, credit: totalCOGS,
-      });
-      if (le4) throw le4;
+      await supabase.from("ledger_entries").insert({
+        transaction_id: txn.id, account_name: "Cash", debit: totalAmount, credit: 0, organization_id: organizationId,
+      } as any);
+      await supabase.from("ledger_entries").insert({
+        transaction_id: txn.id, account_name: "Revenue", debit: 0, credit: totalAmount, organization_id: organizationId,
+      } as any);
+      await supabase.from("ledger_entries").insert({
+        transaction_id: txn.id, account_name: "COGS", debit: totalCOGS, credit: 0, organization_id: organizationId,
+      } as any);
+      await supabase.from("ledger_entries").insert({
+        transaction_id: txn.id, account_name: "Inventory", debit: 0, credit: totalCOGS, organization_id: organizationId,
+      } as any);
 
       return txn;
     },
@@ -171,13 +184,14 @@ export function useProcessSale() {
 
 export function useReceivePurchase() {
   const qc = useQueryClient();
+  const { organizationId } = useAuth();
   return useMutation({
     mutationFn: async (items: { product: Product; quantity: number; cost: number }[]) => {
       const totalAmount = items.reduce((sum, i) => sum + i.quantity * i.cost, 0);
 
       const { data: txn, error: txnErr } = await supabase
         .from("transactions")
-        .insert({ type: "Purchase", total_amount: totalAmount, status: "Completed" })
+        .insert({ type: "Purchase", total_amount: totalAmount, status: "Completed", organization_id: organizationId } as any)
         .select()
         .single();
       if (txnErr) throw txnErr;
@@ -194,20 +208,17 @@ export function useReceivePurchase() {
           change_amount: item.quantity,
           reason: "Purchase",
           reference_transaction_id: txn.id,
-        });
+          organization_id: organizationId,
+        } as any);
         if (logErr) throw logErr;
       }
 
-      // Debit Inventory, Credit Cash
-      const { error: le1 } = await supabase.from("ledger_entries").insert({
-        transaction_id: txn.id, account_name: "Inventory", debit: totalAmount, credit: 0,
-      });
-      if (le1) throw le1;
-
-      const { error: le2 } = await supabase.from("ledger_entries").insert({
-        transaction_id: txn.id, account_name: "Cash", debit: 0, credit: totalAmount,
-      });
-      if (le2) throw le2;
+      await supabase.from("ledger_entries").insert({
+        transaction_id: txn.id, account_name: "Inventory", debit: totalAmount, credit: 0, organization_id: organizationId,
+      } as any);
+      await supabase.from("ledger_entries").insert({
+        transaction_id: txn.id, account_name: "Cash", debit: 0, credit: totalAmount, organization_id: organizationId,
+      } as any);
 
       return txn;
     },
@@ -220,10 +231,15 @@ export function useReceivePurchase() {
 }
 
 export function useTrialBalance() {
+  const { organizationId } = useAuth();
   return useQuery({
-    queryKey: ["trial-balance"],
+    queryKey: ["trial-balance", organizationId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("ledger_entries").select("account_name, debit, credit");
+      let query = supabase.from("ledger_entries").select("account_name, debit, credit");
+      if (organizationId) {
+        query = query.eq("organization_id", organizationId);
+      }
+      const { data, error } = await query;
       if (error) throw error;
 
       const accounts: Record<string, { debit: number; credit: number }> = {};
@@ -236,18 +252,20 @@ export function useTrialBalance() {
       }
       return accounts;
     },
+    enabled: !!organizationId,
   });
 }
 
 export function useAdjustStock() {
   const qc = useQueryClient();
+  const { organizationId } = useAuth();
   return useMutation({
     mutationFn: async ({ product, newStock, reason }: { product: Product; newStock: number; reason: string }) => {
       const change = newStock - product.current_stock;
 
       const { data: txn, error: txnErr } = await supabase
         .from("transactions")
-        .insert({ type: "Adjustment", total_amount: 0, status: "Completed", notes: reason })
+        .insert({ type: "Adjustment", total_amount: 0, status: "Completed", notes: reason, organization_id: organizationId } as any)
         .select()
         .single();
       if (txnErr) throw txnErr;
@@ -263,18 +281,18 @@ export function useAdjustStock() {
         change_amount: change,
         reason: `Adjustment: ${reason}`,
         reference_transaction_id: txn.id,
-      });
+        organization_id: organizationId,
+      } as any);
       if (logErr) throw logErr;
 
-      // Adjust inventory ledger
       if (change > 0) {
         await supabase.from("ledger_entries").insert({
-          transaction_id: txn.id, account_name: "Inventory", debit: Math.abs(change) * product.unit_cost, credit: 0,
-        });
+          transaction_id: txn.id, account_name: "Inventory", debit: Math.abs(change) * product.unit_cost, credit: 0, organization_id: organizationId,
+        } as any);
       } else if (change < 0) {
         await supabase.from("ledger_entries").insert({
-          transaction_id: txn.id, account_name: "Inventory", debit: 0, credit: Math.abs(change) * product.unit_cost,
-        });
+          transaction_id: txn.id, account_name: "Inventory", debit: 0, credit: Math.abs(change) * product.unit_cost, organization_id: organizationId,
+        } as any);
       }
 
       return txn;
