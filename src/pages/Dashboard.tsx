@@ -32,7 +32,16 @@ export default function Dashboard() {
     );
   }
 
-  const stats = data!;
+  if (!data) {
+    return (
+      <div className="space-y-6">
+        <h2 className="text-2xl font-bold">Dashboard</h2>
+        <p className="text-muted-foreground">No data available. Please ensure you belong to an organization.</p>
+      </div>
+    );
+  }
+
+  const stats = data;
 
   return (
     <div className="space-y-6">
