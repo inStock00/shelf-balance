@@ -130,7 +130,7 @@ export default function UserManagement() {
       return;
     }
 
-    setLoading(true);
+    setInviteLoading(true);
     try {
       // Create the user account via Supabase admin (edge function would be ideal)
       // For now, sign up the user and assign org + role
@@ -163,7 +163,7 @@ export default function UserManagement() {
     } catch (err: any) {
       toast.error(err.message);
     } finally {
-      setLoading(false);
+      setInviteLoading(false);
     }
   };
 
