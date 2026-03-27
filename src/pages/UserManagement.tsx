@@ -43,7 +43,7 @@ export default function UserManagement() {
   const [inviteRole, setInviteRole] = useState<AppRole>("user");
   const [inviteLoading, setInviteLoading] = useState(false);
 
-  // Fetch all organizations (for super admins to reassign users)
+  // Fetch organizations
   const { data: allOrgs } = useQuery({
     queryKey: ["all-organizations"],
     queryFn: async () => {
@@ -51,7 +51,7 @@ export default function UserManagement() {
       if (error) throw error;
       return data;
     },
-    enabled: isSuperAdmin,
+    enabled: true,
   });
 
   const { data: orgUsers, isLoading } = useQuery({
