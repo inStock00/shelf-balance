@@ -116,10 +116,54 @@ export default function UserManagement() {
     qc.invalidateQueries({ queryKey: ["org-users"] });
   };
 
+  const [inviteOrgId, setInviteOrgId] = useState<string>("");
+
   const handleInvite = async () => {
-    // Sign up the user via edge function or manual – for now show instructions
-    toast.info("Share this link with the user to sign up, then assign them to your organization.");
-    setInviteOpen(false);
+    if (!inviteEmail) {
+      toast.error("Please enter an email address.");
+      return;
+    }
+    const targetOrgId = isSuperAdmin ? inviteOrgId : organizationId;
+    if (!targetOrgId) {
+      toast.error("Please select an organization.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Create the user account via Supabase admin (edge function would be ideal)
+      // For now, sign up the user and assign org + role
+      const { data, error } = await supabase.auth.signUp({
+        email: inviteEmail,
+        password: crypto.randomUUID().slice(0, 16) + "A1!", // temporary password
+        options: {
+          data: { display_name: inviteEmail.split("@")[0] },
+          emailRedirectTo: window.location.origin + "/login",
+        },
+      });
+      if (error) throw error;
+
+      if (data.user) {
+        // Assign organization
+        await supabase.from("profiles").update({ organization_id: targetOrgId }).eq("id", data.user.id);
+        // Assign role
+        await supabase.from("user_roles").upsert(
+          { user_id: data.user.id, role: inviteRole },
+          { onConflict: "user_id,role" }
+        );
+      }
+
+      toast.success(`Invitation sent to ${inviteEmail}. They will receive an email to confirm their account.`);
+      setInviteOpen(false);
+      setInviteEmail("");
+      setInviteRole("user");
+      setInviteOrgId("");
+      qc.invalidateQueries({ queryKey: ["org-users"] });
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const roleBadgeVariant = (role: string) => {
