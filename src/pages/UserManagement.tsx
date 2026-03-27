@@ -41,6 +41,7 @@ export default function UserManagement() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<AppRole>("user");
+  const [inviteLoading, setInviteLoading] = useState(false);
 
   // Fetch all organizations (for super admins to reassign users)
   const { data: allOrgs } = useQuery({
