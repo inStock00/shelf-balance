@@ -272,8 +272,28 @@ export default function UserManagement() {
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div>
-              <Label>Email</Label>
+              <Label>Email <span className="text-destructive">*</span></Label>
               <Input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="user@example.com" />
+            </div>
+            <div>
+              <Label>Organization <span className="text-destructive">*</span></Label>
+              {isSuperAdmin ? (
+                <Select value={inviteOrgId} onValueChange={setInviteOrgId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select organization" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allOrgs?.map((org: any) => (
+                      <SelectItem key={org.id} value={org.id}>{org.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={allOrgs?.find((o: any) => o.id === organizationId)?.name || "Your organization"}
+                  disabled
+                />
+              )}
             </div>
             <div>
               <Label>Role</Label>
@@ -290,7 +310,9 @@ export default function UserManagement() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setInviteOpen(false)}>Cancel</Button>
-            <Button onClick={handleInvite}>Send Invite</Button>
+            <Button onClick={handleInvite} disabled={inviteLoading}>
+              {inviteLoading ? "Sending..." : "Send Invite"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
