@@ -69,6 +69,33 @@ export type Database = {
           },
         ]
       }
+      contact_messages: {
+        Row: {
+          created_at: string
+          id: string
+          message: string
+          name: string
+          sender_email: string
+          subject: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message: string
+          name: string
+          sender_email: string
+          subject: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string
+          name?: string
+          sender_email?: string
+          subject?: string
+        }
+        Relationships: []
+      }
       inventory_logs: {
         Row: {
           change_amount: number

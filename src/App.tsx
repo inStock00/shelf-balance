@@ -16,6 +16,7 @@ import FeatureManagement from "./pages/FeatureManagement";
 import UserManagement from "./pages/UserManagement";
 import OrganizationManagement from "./pages/OrganizationManagement";
 import NotFound from "./pages/NotFound";
+import Contact from "./pages/Contact";
 
 const queryClient = new QueryClient();
 
@@ -28,6 +29,7 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/contact" element={<Contact />} />
             <Route
               path="/*"
               element={
