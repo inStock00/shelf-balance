@@ -14,6 +14,61 @@ export type Database = {
   }
   public: {
     Tables: {
+      attribute_options: {
+        Row: {
+          attribute_id: string
+          id: string
+          value: string
+        }
+        Insert: {
+          attribute_id: string
+          id?: string
+          value: string
+        }
+        Update: {
+          attribute_id?: string
+          id?: string
+          value?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attribute_options_attribute_id_fkey"
+            columns: ["attribute_id"]
+            isOneToOne: false
+            referencedRelation: "attributes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      attributes: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          organization_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          organization_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          organization_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attributes_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inventory_logs: {
         Row: {
           change_amount: number
@@ -23,6 +78,7 @@ export type Database = {
           product_id: string
           reason: string
           reference_transaction_id: string | null
+          variant_id: string | null
         }
         Insert: {
           change_amount: number
@@ -32,6 +88,7 @@ export type Database = {
           product_id: string
           reason: string
           reference_transaction_id?: string | null
+          variant_id?: string | null
         }
         Update: {
           change_amount?: number
@@ -41,6 +98,7 @@ export type Database = {
           product_id?: string
           reason?: string
           reference_transaction_id?: string | null
+          variant_id?: string | null
         }
         Relationships: [
           {
@@ -62,6 +120,13 @@ export type Database = {
             columns: ["reference_transaction_id"]
             isOneToOne: false
             referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_logs_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
             referencedColumns: ["id"]
           },
         ]
@@ -164,12 +229,73 @@ export type Database = {
         }
         Relationships: []
       }
+      product_variants: {
+        Row: {
+          barcode: string | null
+          created_at: string
+          id: string
+          organization_id: string | null
+          price_override: number | null
+          product_id: string
+          reorder_point: number
+          sku: string
+          stock_quantity: number
+          unit_cost: number
+          updated_at: string
+        }
+        Insert: {
+          barcode?: string | null
+          created_at?: string
+          id?: string
+          organization_id?: string | null
+          price_override?: number | null
+          product_id: string
+          reorder_point?: number
+          sku: string
+          stock_quantity?: number
+          unit_cost?: number
+          updated_at?: string
+        }
+        Update: {
+          barcode?: string | null
+          created_at?: string
+          id?: string
+          organization_id?: string | null
+          price_override?: number | null
+          product_id?: string
+          reorder_point?: number
+          sku?: string
+          stock_quantity?: number
+          unit_cost?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_variants_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_variants_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
+          base_price: number
           category: string
           created_at: string
           current_stock: number
+          description: string | null
+          has_variants: boolean
           id: string
+          image_url: string | null
           name: string
           organization_id: string | null
           reorder_point: number
@@ -179,10 +305,14 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          base_price?: number
           category?: string
           created_at?: string
           current_stock?: number
+          description?: string | null
+          has_variants?: boolean
           id?: string
+          image_url?: string | null
           name: string
           organization_id?: string | null
           reorder_point?: number
@@ -192,10 +322,14 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          base_price?: number
           category?: string
           created_at?: string
           current_stock?: number
+          description?: string | null
+          has_variants?: boolean
           id?: string
+          image_url?: string | null
           name?: string
           organization_id?: string | null
           reorder_point?: number
@@ -304,6 +438,39 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      variant_attribute_values: {
+        Row: {
+          attribute_option_id: string
+          id: string
+          variant_id: string
+        }
+        Insert: {
+          attribute_option_id: string
+          id?: string
+          variant_id: string
+        }
+        Update: {
+          attribute_option_id?: string
+          id?: string
+          variant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "variant_attribute_values_attribute_option_id_fkey"
+            columns: ["attribute_option_id"]
+            isOneToOne: false
+            referencedRelation: "attribute_options"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "variant_attribute_values_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
