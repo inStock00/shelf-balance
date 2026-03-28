@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { useProducts, useCreateProduct, useAdjustStock } from "@/hooks/useInventory";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useProducts, useAllVariants, useProductVariants, useUpdateVariantStock, type ProductRow, type ProductVariant } from "@/hooks/useInventory";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -20,63 +21,134 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Plus, Search, SlidersHorizontal } from "lucide-react";
+import { Plus, Search, SlidersHorizontal, ChevronDown, ChevronRight, Package } from "lucide-react";
 import { toast } from "sonner";
-import type { Database } from "@/integrations/supabase/types";
-
-type Product = Database["public"]["Tables"]["products"]["Row"];
+import AddProductDialog from "@/components/inventory/AddProductDialog";
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 
-export default function Inventory() {
-  const [search, setSearch] = useState("");
-  const [addOpen, setAddOpen] = useState(false);
-  const [adjustProduct, setAdjustProduct] = useState<Product | null>(null);
-  const [adjustStock, setAdjustStock] = useState("");
-  const [adjustReason, setAdjustReason] = useState("");
+function VariantRows({ product }: { product: ProductRow }) {
+  const { data: variants, isLoading } = useProductVariants(product.id);
 
-  const { data: products, isLoading } = useProducts(search);
-  const createProduct = useCreateProduct();
-  const adjustStockMut = useAdjustStock();
+  if (isLoading) return (
+    <TableRow>
+      <TableCell colSpan={8}><Skeleton className="h-8 w-full" /></TableCell>
+    </TableRow>
+  );
 
-  const [form, setForm] = useState({
-    name: "", sku: "", category: "General", unit_cost: "", selling_price: "", current_stock: "", reorder_point: "10",
-  });
+  return (
+    <>
+      {(variants || []).map((v) => (
+        <VariantRow key={v.id} variant={v} productName={product.name} />
+      ))}
+    </>
+  );
+}
 
-  const handleAdd = async () => {
+function VariantRow({ variant, productName }: { variant: ProductVariant; productName: string }) {
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  const [newStock, setNewStock] = useState(String(variant.stock_quantity));
+  const [reason, setReason] = useState("");
+  const updateStock = useUpdateVariantStock();
+
+  const handleAdjust = async () => {
     try {
-      await createProduct.mutateAsync({
-        name: form.name,
-        sku: form.sku,
-        category: form.category,
-        unit_cost: parseFloat(form.unit_cost),
-        selling_price: parseFloat(form.selling_price),
-        current_stock: parseInt(form.current_stock),
-        reorder_point: parseInt(form.reorder_point),
+      await updateStock.mutateAsync({
+        variantId: variant.id,
+        newStock: parseInt(newStock),
+        reason: reason || "Manual adjustment",
       });
-      toast.success("Product created");
-      setAddOpen(false);
-      setForm({ name: "", sku: "", category: "General", unit_cost: "", selling_price: "", current_stock: "", reorder_point: "10" });
+      toast.success("Stock adjusted");
+      setAdjustOpen(false);
     } catch (e: any) {
       toast.error(e.message);
     }
   };
 
-  const handleAdjust = async () => {
-    if (!adjustProduct) return;
-    try {
-      await adjustStockMut.mutateAsync({
-        product: adjustProduct,
-        newStock: parseInt(adjustStock),
-        reason: adjustReason || "Manual adjustment",
-      });
-      toast.success("Stock adjusted");
-      setAdjustProduct(null);
-    } catch (e: any) {
-      toast.error(e.message);
-    }
+  const attrLabel = variant.attribute_values?.map((av) => av.option_value).join(" / ") || "";
+  const price = variant.price_override ?? variant.unit_cost;
+
+  return (
+    <>
+      <TableRow className="bg-muted/20">
+        <TableCell className="pl-10 text-muted-foreground text-sm">
+          {attrLabel ? (
+            <div className="flex gap-1">
+              {variant.attribute_values?.map((av, i) => (
+                <Badge key={i} variant="outline" className="text-xs">
+                  {av.attribute_name}: {av.option_value}
+                </Badge>
+              ))}
+            </div>
+          ) : (
+            <span className="italic">Default</span>
+          )}
+        </TableCell>
+        <TableCell className="text-muted-foreground text-sm">{variant.sku}</TableCell>
+        <TableCell></TableCell>
+        <TableCell className="text-right text-sm">{fmt(variant.unit_cost)}</TableCell>
+        <TableCell className="text-right text-sm">{fmt(price)}</TableCell>
+        <TableCell className="text-right">
+          <span className={variant.stock_quantity <= variant.reorder_point ? "text-destructive font-semibold" : ""}>
+            {variant.stock_quantity}
+          </span>
+        </TableCell>
+        <TableCell className="text-right text-sm">{fmt(variant.stock_quantity * variant.unit_cost)}</TableCell>
+        <TableCell>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setNewStock(String(variant.stock_quantity));
+              setReason("");
+              setAdjustOpen(true);
+            }}
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+          </Button>
+        </TableCell>
+      </TableRow>
+
+      <Dialog open={adjustOpen} onOpenChange={setAdjustOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Quick Adjust — {productName} ({variant.sku})</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div>
+              <Label>Current Stock: {variant.stock_quantity}</Label>
+              <Input type="number" value={newStock} onChange={(e) => setNewStock(e.target.value)} placeholder="New stock count" className="mt-1" />
+            </div>
+            <div>
+              <Label>Reason</Label>
+              <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g., Physical count correction" className="mt-1" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAdjustOpen(false)}>Cancel</Button>
+            <Button onClick={handleAdjust} disabled={updateStock.isPending}>Adjust</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+export default function Inventory() {
+  const [search, setSearch] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const { data: products, isLoading } = useProducts(search);
+
+  const toggleExpand = (id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   return (
@@ -117,7 +189,7 @@ export default function Inventory() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
+                    <TableHead>Product</TableHead>
                     <TableHead>SKU</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead className="text-right">Unit Cost</TableHead>
@@ -129,34 +201,43 @@ export default function Inventory() {
                 </TableHeader>
                 <TableBody>
                   {products.map((p) => (
-                    <TableRow key={p.id}>
-                      <TableCell className="font-medium">{p.name}</TableCell>
-                      <TableCell className="text-muted-foreground">{p.sku}</TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{p.category}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right">{fmt(p.unit_cost)}</TableCell>
-                      <TableCell className="text-right">{fmt(p.selling_price)}</TableCell>
-                      <TableCell className="text-right">
-                        <span className={p.current_stock <= p.reorder_point ? "text-destructive font-semibold" : ""}>
-                          {p.current_stock}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">{fmt(p.current_stock * p.unit_cost)}</TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setAdjustProduct(p);
-                            setAdjustStock(String(p.current_stock));
-                            setAdjustReason("");
-                          }}
-                        >
-                          <SlidersHorizontal className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
+                    <>
+                      <TableRow
+                        key={p.id}
+                        className={p.has_variants ? "cursor-pointer" : ""}
+                        onClick={() => p.has_variants && toggleExpand(p.id)}
+                      >
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            {p.has_variants && (
+                              expanded.has(p.id) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />
+                            )}
+                            {p.name}
+                            {p.has_variants && (
+                              <Badge variant="secondary" className="text-xs">Variants</Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{p.has_variants ? "—" : p.sku}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">{p.category}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right">{p.has_variants ? "—" : fmt(p.unit_cost)}</TableCell>
+                        <TableCell className="text-right">{fmt(p.base_price || p.selling_price)}</TableCell>
+                        <TableCell className="text-right">
+                          {p.has_variants ? "—" : (
+                            <span className={p.current_stock <= p.reorder_point ? "text-destructive font-semibold" : ""}>
+                              {p.current_stock}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">{p.has_variants ? "—" : fmt(p.current_stock * p.unit_cost)}</TableCell>
+                        <TableCell></TableCell>
+                      </TableRow>
+                      {p.has_variants && expanded.has(p.id) && (
+                        <VariantRows key={`v-${p.id}`} product={p} />
+                      )}
+                    </>
                   ))}
                 </TableBody>
               </Table>
@@ -165,96 +246,7 @@ export default function Inventory() {
         </CardContent>
       </Card>
 
-      {/* Add Product Dialog */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Product</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Name</Label>
-                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-              </div>
-              <div>
-                <Label>SKU</Label>
-                <Input value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
-              </div>
-            </div>
-            <div>
-              <Label>Category</Label>
-              <Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Unit Cost</Label>
-                <Input type="number" value={form.unit_cost} onChange={(e) => setForm({ ...form, unit_cost: e.target.value })} />
-              </div>
-              <div>
-                <Label>Selling Price</Label>
-                <Input type="number" value={form.selling_price} onChange={(e) => setForm({ ...form, selling_price: e.target.value })} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Initial Stock</Label>
-                <Input type="number" value={form.current_stock} onChange={(e) => setForm({ ...form, current_stock: e.target.value })} />
-              </div>
-              <div>
-                <Label>Reorder Point</Label>
-                <Input type="number" value={form.reorder_point} onChange={(e) => setForm({ ...form, reorder_point: e.target.value })} />
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-            <Button onClick={handleAdd} disabled={!form.name || !form.sku}>Save</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Quick Adjust Dialog */}
-      <Dialog open={!!adjustProduct} onOpenChange={() => setAdjustProduct(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Quick Adjust — {adjustProduct?.name}</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div>
-              <Label>Current Stock: {adjustProduct?.current_stock}</Label>
-              <Input
-                type="number"
-                value={adjustStock}
-                onChange={(e) => setAdjustStock(e.target.value)}
-                placeholder="New stock count"
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label>Reason</Label>
-              <Input
-                value={adjustReason}
-                onChange={(e) => setAdjustReason(e.target.value)}
-                placeholder="e.g., Physical count correction"
-                className="mt-1"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAdjustProduct(null)}>Cancel</Button>
-            <Button onClick={handleAdjust}>Adjust</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <AddProductDialog open={addOpen} onOpenChange={setAddOpen} />
     </div>
-  );
-}
-
-function Package(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M16.5 9.4 7.55 4.24" /><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline points="3.29 7 12 12 20.71 7" /><line x1="12" x2="12" y1="22" y2="12" />
-    </svg>
   );
 }
